@@ -1,0 +1,8 @@
+[package]
+name = "fox-flux-advance"
+version = "0.1.0"
+authors = ["Eevee (Evelyn Woods) <eevee.git@veekun.com>"]
+edition = "2018"
+
+[dependencies]
+gba = "^0.3.0"
