@@ -30,7 +30,27 @@ pub enum Bounds<N: Numberlike> {
     BBox(AABB<N>),
 }
 
+
+impl<N: Numberlike> Point<N> {
+    pub fn new(x: N, y: N) -> Self {
+        Point{x, y}
+    }
+}
+
+impl<N: Numberlike> Size<N> {
+    pub fn new(width: N, height: N) -> Self {
+        Size{width, height}
+    }
+}
+
 impl<N: Numberlike> AABB<N> {
+    pub fn from_extents(x0: N, y0: N, x1: N, y1: N) -> Self {
+        AABB{
+            topleft: Point::new(x0, y0),
+            size: Size::new(x1 - x0, y1 - y0),
+        }
+    }
+
     pub fn x0(&self) -> N {
         self.topleft.x
     }

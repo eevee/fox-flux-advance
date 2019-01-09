@@ -55,7 +55,7 @@ pub type Unit = i16;
 
 
 use crate::data::places::TEST_PLACE;
-use crate::geom::{Camera, Point};
+use crate::geom::{Camera, Point, AABB};
 
 #[start]
 fn main(_argc: isize, _argv: *const *const u8) -> isize {
@@ -123,7 +123,7 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
     game.camera.bounds = crate::geom::Bounds::BBox(crate::geom::AABB{ topleft: crate::geom::Point{x: 0, y: 0}, size: crate::geom::Size{width: 1024, height: 1024} });
     game.camera.size = crate::geom::Size{ width: 240, height: 160 };
     game.camera.margin = crate::geom::Size{ width: 64, height: 32 };
-    let mut lexy = Lexy{ position: Point{ x: 48, y: 80 }, velocity: Point{ x: 0, y: 2 }, anchor: Point{ x: 17, y: 47 } };
+    let mut lexy = Lexy{ position: Point{ x: 48, y: 80 }, velocity: Point{ x: 0, y: 2 }, anchor: Point{ x: 17, y: 47 }, facing_left: false };
     loop {
         spin_until_vdraw();
         spin_until_vblank();
@@ -142,6 +142,18 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
     }
 }
 
+macro_rules! spew (
+    () => {};
+    ($($arg:tt)*) => ({
+        use gba::mgba::{MGBADebug, MGBADebugLevel};
+        use core::fmt::Write;
+        if let Some(mut debug) = MGBADebug::new() {
+            write!(debug, $($arg)*).unwrap();
+            debug.send(MGBADebugLevel::Debug);
+        }
+    });
+);
+
 struct Game {
     camera: Camera<i16>,
 }
@@ -154,18 +166,90 @@ struct Lexy {
     position: Point<Unit>,
     velocity: Point<Unit>,
     anchor: Point<Unit>,
+    facing_left: bool,
 }
+
+static LEXY_BBOX: AABB<i16> = AABB{ topleft: Point{ x: -6, y: -26}, size: crate::geom::Size{ width: 12, height: 27 } };
 
 impl Entity for Lexy {
     fn update(&mut self, game: &Game) {
-        self.position.x += self.velocity.x;
-        self.position.y += self.velocity.y;
+        // gravity or whatever
+        self.velocity.y += 1;
+
+        let dx = self.velocity.x;
+        let mut dy = self.velocity.y;
+
+        // poor man's collision detection
+        const TILE_SIZE: i16 = 8;
+        // x
+        self.position.x += dx;
+        // y
+        if dy > 0 {
+            let mut edge = self.position.y + LEXY_BBOX.y1();
+            let mut to_next_tile = TILE_SIZE - edge % TILE_SIZE;
+            if to_next_tile == TILE_SIZE {
+                to_next_tile = 0;
+            }
+            
+            if dy < to_next_tile {
+                self.position.y += dy;
+            }
+            else if dy >= to_next_tile {
+                self.position.y += to_next_tile;
+                edge += to_next_tile;
+                dy -= to_next_tile;
+                while dy > 0 {
+                    let tid = TEST_PLACE.tiles[(edge / TILE_SIZE) as usize][(self.position.x / TILE_SIZE) as usize];
+                    if TEST_PLACE.tileset.tiles[tid as usize].solid {
+                        self.velocity.y = 0;
+                        break;
+                    }
+                    if dy >= TILE_SIZE {
+                        dy -= TILE_SIZE;
+                        self.position.y += TILE_SIZE;
+                        edge += TILE_SIZE;
+                    }
+                    else {
+                        self.position.y += dy;
+                        break;
+                    }
+                }
+            }
+        }
+        else if dy < 0 {
+            let mut edge = self.position.y + LEXY_BBOX.y0();
+            let to_next_tile = edge % TILE_SIZE;
+            dy = -dy;
+            if dy < to_next_tile {
+                self.position.y -= dy;
+            }
+            else if dy >= to_next_tile {
+                self.position.y -= to_next_tile;
+                edge -= to_next_tile;
+                dy -= to_next_tile;
+                while dy > 0 {
+                    let tid = TEST_PLACE.tiles[(edge / TILE_SIZE) as usize][(self.position.x / TILE_SIZE) as usize];
+                    if TEST_PLACE.tileset.tiles[tid as usize].solid {
+                        break;
+                    }
+                    if dy >= TILE_SIZE {
+                        dy -= TILE_SIZE;
+                        self.position.y -= TILE_SIZE;
+                    }
+                    else {
+                        self.position.y -= dy;
+                        break;
+                    }
+                }
+            }
+        }
 
         // update position i guess?  assumes slot 0!
-        // TODO apply camera offset
+        let sx = self.position.x - (if self.facing_left { 32 - self.anchor.x } else { self.anchor.x }) - game.camera.position.x;
+        let sy = self.position.y - self.anchor.y - game.camera.position.y;
         unsafe {
-            (0x0700_0000 as *mut u16).write_volatile((self.position.y - self.anchor.y - game.camera.position.y + 256) as u16 & 0xffu16 | 0x2000u16 | 0x8000u16);
-            (0x0700_0002 as *mut u16).write_volatile((self.position.x - self.anchor.x - game.camera.position.x + 512) as u16 & 0x1ffu16 | 0xc000u16);
+            (0x0700_0000 as *mut u16).write_volatile((sy + 256) as u16 & 0xffu16 | 0x2000u16 | 0x8000u16);
+            (0x0700_0002 as *mut u16).write_volatile((sx + 512) as u16 & 0x1ffu16 | 0xc000u16 | if self.facing_left { 0x1000u16 } else { 0u16 });
             (0x0700_0004 as *mut u16).write_volatile(0u16 | 0x0400u16);
         }
     }
@@ -174,18 +258,24 @@ impl Entity for Lexy {
 fn step(game: &mut Game, lexy: &mut Lexy) {
     let input = read_key_input();
 
-    lexy.velocity.x = 0;
-    lexy.velocity.y = 0;
     if input.left() {
-        lexy.velocity.x = -1;
+        lexy.velocity.x = -3;
+        lexy.facing_left = true;
     }
-    if input.right() {
-        lexy.velocity.x = 1;
+    else if input.right() {
+        lexy.velocity.x = 3;
+        lexy.facing_left = false;
     }
+    else {
+        lexy.velocity.x = 0;
+    }
+
     if input.up() {
-        lexy.velocity.y = -1;
+        if lexy.velocity.y == 0 {
+            lexy.velocity.y -= 16;
+        }
     }
     if input.down() {
-        lexy.velocity.y = 1;
+        //lexy.velocity.y = 1;
     }
 }
