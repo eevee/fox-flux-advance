@@ -1,6 +1,5 @@
 #![no_std]
 #![feature(start)]
-#![feature(lang_items)]
 
 extern crate gba;
 extern crate num_traits;
@@ -21,16 +20,12 @@ fn panic(panic_info: &core::panic::PanicInfo) -> ! {
     loop {}
 }
 
-#[lang = "eh_personality"] fn eh_personality() {}
 
-
-use core::intrinsics::transmute;
-use gba::io::display::{DisplayMode};
 use gba::{
     base::volatile::VolAddress,
     io::{
         background::{BackgroundControlSetting, BG0CNT, BG1CNT, BG0HOFS, BG0VOFS},
-        display::{DisplayControlSetting, DISPCNT, spin_until_vblank, spin_until_vdraw},
+        display::{DISPCNT, DisplayControlSetting, DisplayMode, spin_until_vblank, spin_until_vdraw},
         keypad::{read_key_input},
     },
     oam::{write_obj_attributes},
