@@ -30,7 +30,7 @@ use gba::{
         keypad::{read_key_input},
     },
     oam::{write_obj_attributes},
-    palram::index_palram_bg_4bpp,
+    palram::{index_palram_bg_8bpp, index_palram_obj_8bpp},
     vram::{text::TextScreenblockEntry, Tile4bpp, CHAR_BASE_BLOCKS, SCREEN_BASE_BLOCKS},
     Color,
 };
@@ -46,6 +46,7 @@ pub const BG1VOFS: VolAddress<u16> = unsafe { VolAddress::new_unchecked(0x400_00
 
 use euclid::{point2, rect, size2};
 
+use crate::data::PALETTE;
 use crate::data::places::TEST_PLACE;
 use crate::geom::{Camera, Point, Rect, Size};
 
@@ -54,20 +55,20 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
     let disp = DisplayControlSetting::new().with_mode(DisplayMode::Mode2).with_oam_memory_1d(true).with_obj(true);
     DISPCNT.write(disp);
 
-    let lexydata = include_bytes!("../lexy.bin");
-    let tiledata = include_bytes!("../terrain.bin");
+    let lexydata = include_bytes!("../target/assets/lexy.bin");
+    let tiledata = include_bytes!("../target/assets/terrain.bin");
 
     // TODO oam_init, blanks out OAM
+
+    // Set up palette
+    for (i, &color) in PALETTE.iter().enumerate() {
+        index_palram_bg_8bpp(i as u8).write(color);
+        index_palram_obj_8bpp(i as u8).write(color);
+    }
 
     unsafe {
         while (0x0400_0006 as *mut u16).read_volatile() >= 160 {}
         while (0x0400_0006 as *mut u16).read_volatile() < 160 {}
-
-        // PALETTE
-        for p in 0..64 {
-            ((0x0500_0000 + p * 2) as *mut u16).write_volatile(lexydata[p * 2] as u16 | (lexydata[p * 2 + 1] as u16) << 8);
-            ((0x0500_0200 + p * 2) as *mut u16).write_volatile(lexydata[p * 2] as u16 | (lexydata[p * 2 + 1] as u16) << 8);
-        }
 
         while (0x0400_0006 as *mut u16).read_volatile() >= 160 {}
         while (0x0400_0006 as *mut u16).read_volatile() < 160 {}
@@ -75,8 +76,8 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
         // SPRITE
         for p in 0usize..0x400usize {
             ((0x0200_0000) as *mut u16).write_volatile(p as u16);
-            ((0x0200_0002 + p * 2) as *mut u16).write_volatile(lexydata[p * 2 + 0x80] as u16 | (lexydata[p * 2 + 0x80 + 1] as u16) << 8);
-            ((0x0601_0000 + p * 2) as *mut u16).write_volatile(lexydata[p * 2 + 0x80] as u16 | (lexydata[p * 2 + 0x80 + 1] as u16) << 8);
+            ((0x0200_0002 + p * 2) as *mut u16).write_volatile(lexydata[p * 2] as u16 | (lexydata[p * 2 + 1] as u16) << 8);
+            ((0x0601_0000 + p * 2) as *mut u16).write_volatile(lexydata[p * 2] as u16 | (lexydata[p * 2 + 1] as u16) << 8);
         }
 
         //write_obj_attributes(...)

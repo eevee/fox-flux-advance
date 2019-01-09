@@ -23,7 +23,7 @@
   "panic-strategy": "abort",
   "pre-link-args": {
     "ld": [
-      "-Tlinker.ld"
+      "-Tbuild-stuff/gba/linker.ld"
     ]
   },
   "relocation-model": "static",
