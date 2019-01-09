@@ -1,6 +1,7 @@
 #![no_std]
 #![feature(start)]
 
+extern crate euclid;
 extern crate gba;
 extern crate num_traits;
 
@@ -43,14 +44,10 @@ pub const BG1HOFS: VolAddress<u16> = unsafe { VolAddress::new_unchecked(0x400_00
 pub const BG1VOFS: VolAddress<u16> = unsafe { VolAddress::new_unchecked(0x400_0016) };
 
 
-
-
-// geom types
-pub type Unit = i16;
-
+use euclid::{point2, rect, size2};
 
 use crate::data::places::TEST_PLACE;
-use crate::geom::{Camera, Point, AABB};
+use crate::geom::{Camera, Point, Rect, Size};
 
 #[start]
 fn main(_argc: isize, _argv: *const *const u8) -> isize {
@@ -115,10 +112,16 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
     DISPCNT.write(DisplayControlSetting::new().with_bg0(true).with_bg1(true).with_obj(true).with_oam_memory_1d(true));
 
     let mut game = Game{ camera: Camera::new() };
-    game.camera.bounds = crate::geom::Bounds::BBox(crate::geom::AABB{ topleft: crate::geom::Point{x: 0, y: 0}, size: crate::geom::Size{width: 1024, height: 1024} });
-    game.camera.size = crate::geom::Size{ width: 240, height: 160 };
-    game.camera.margin = crate::geom::Size{ width: 64, height: 32 };
-    let mut lexy = Lexy{ position: Point{ x: 48, y: 80 }, velocity: Point{ x: 0, y: 2 }, anchor: Point{ x: 17, y: 47 }, facing_left: false };
+    game.camera.bounds = crate::geom::Bounds::BBox(rect(0, 0, 1024, 1024));
+    game.camera.size = size2(240, 160);
+    game.camera.margin = size2(64, 32);
+    let mut lexy = Lexy{
+        position: point2(48, 80),
+        velocity: point2(0, 2),
+        anchor: point2(17, 47),
+        bbox: rect(-6, -26, 12, 27),
+        facing_left: false,
+    };
     loop {
         spin_until_vdraw();
         spin_until_vblank();
@@ -150,7 +153,7 @@ macro_rules! spew (
 );
 
 struct Game {
-    camera: Camera<i16>,
+    camera: Camera,
 }
 
 trait Entity {
@@ -158,13 +161,12 @@ trait Entity {
 }
 
 struct Lexy {
-    position: Point<Unit>,
-    velocity: Point<Unit>,
-    anchor: Point<Unit>,
+    position: Point,
+    velocity: Point,
+    anchor: Point,
+    bbox: Rect,
     facing_left: bool,
 }
-
-static LEXY_BBOX: AABB<i16> = AABB{ topleft: Point{ x: -6, y: -26}, size: crate::geom::Size{ width: 12, height: 27 } };
 
 impl Entity for Lexy {
     fn update(&mut self, game: &Game) {
@@ -180,7 +182,7 @@ impl Entity for Lexy {
         self.position.x += dx;
         // y
         if dy > 0 {
-            let mut edge = self.position.y + LEXY_BBOX.y1();
+            let mut edge = self.position.y + self.bbox.max_y();
             let mut to_next_tile = TILE_SIZE - edge % TILE_SIZE;
             if to_next_tile == TILE_SIZE {
                 to_next_tile = 0;
@@ -212,7 +214,7 @@ impl Entity for Lexy {
             }
         }
         else if dy < 0 {
-            let mut edge = self.position.y + LEXY_BBOX.y0();
+            let mut edge = self.position.y + self.bbox.min_y();
             let to_next_tile = edge % TILE_SIZE;
             dy = -dy;
             if dy < to_next_tile {

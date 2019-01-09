@@ -1,7 +1,16 @@
 [[package]]
+name = "euclid"
+version = "0.19.5"
+source = "git+https://github.com/servo/euclid?branch=no-std#6ca3dd5ea8afcc902383bb08f131c3c415afaf8d"
+dependencies = [
+ "num-traits 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "fox-flux-advance"
 version = "0.1.0"
 dependencies = [
+ "euclid 0.19.5 (git+https://github.com/servo/euclid?branch=no-std)",
  "gba 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-traits 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -67,6 +76,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [metadata]
+"checksum euclid 0.19.5 (git+https://github.com/servo/euclid?branch=no-std)" = "<none>"
 "checksum gba 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "39ad8663f064b0edc890979af052d8f990c97a5320f59d8b770fd625669038f6"
 "checksum gba-proc-macro 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2cf87285990ee5c1165d24cc92d0cb5b4706c9e835e645850ef88acb811d25ac"
 "checksum num-traits 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "0b3a5d7cc97d6d30d8b9bc8fa19bf45349ffe46241e8816f50f62f6d6aaabee1"

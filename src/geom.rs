@@ -1,93 +1,46 @@
-use num_traits::{Num, clamp, zero};
+use euclid::{TypedPoint2D, TypedRect, TypedSize2D, TypedVector2D};
+use num_traits::clamp;
 
-use core::cmp::PartialOrd;
+pub type Unit = i16;
+pub struct ScreenSpace;
+pub struct WorldSpace;
 
-pub trait Numberlike: Num + Copy + PartialOrd {}
+pub type Point = TypedPoint2D<Unit, WorldSpace>;
+pub type Rect = TypedRect<Unit, WorldSpace>;
+pub type Size = TypedSize2D<Unit, WorldSpace>;
+pub type Vector = TypedVector2D<Unit, WorldSpace>;
 
-impl<T: Num + Copy + PartialOrd> Numberlike for T {}
-
-#[derive(Clone, Copy)]
-pub struct Point<N: Numberlike> {
-    pub x: N,
-    pub y: N,
-}
-
-#[derive(Clone, Copy)]
-pub struct Size<N: Numberlike> {
-    pub width: N,
-    pub height: N,
-}
 
 #[derive(Clone, Copy)]
-pub struct AABB<N: Numberlike> {
-    pub topleft: Point<N>,
-    pub size: Size<N>,
-}
-
-#[derive(Clone, Copy)]
-pub enum Bounds<N: Numberlike> {
+pub enum Bounds {
     Empty,
-    BBox(AABB<N>),
+    BBox(Rect),
 }
 
-
-impl<N: Numberlike> Point<N> {
-    pub fn new(x: N, y: N) -> Self {
-        Point{x, y}
-    }
+// XXX wait, should the camera be in screenspace?
+pub struct Camera {
+    pub bounds: Bounds,
+    pub size: Size,
+    pub position: Point,
+    pub margin: Size,
 }
 
-impl<N: Numberlike> Size<N> {
-    pub fn new(width: N, height: N) -> Self {
-        Size{width, height}
-    }
-}
-
-impl<N: Numberlike> AABB<N> {
-    pub fn from_extents(x0: N, y0: N, x1: N, y1: N) -> Self {
-        AABB{
-            topleft: Point::new(x0, y0),
-            size: Size::new(x1 - x0, y1 - y0),
-        }
-    }
-
-    pub fn x0(&self) -> N {
-        self.topleft.x
-    }
-    pub fn y0(&self) -> N {
-        self.topleft.y
-    }
-    pub fn x1(&self) -> N {
-        self.topleft.x + self.size.width
-    }
-    pub fn y1(&self) -> N {
-        self.topleft.y + self.size.height
-    }
-}
-
-pub struct Camera<N: Numberlike> {
-    pub bounds: Bounds<N>,
-    pub size: Size<N>,
-    pub position: Point<N>,
-    pub margin: Size<N>,
-}
-
-impl<N: Numberlike> Camera<N> {
+impl Camera {
     pub fn new() -> Self {
         Camera{
             bounds: Bounds::Empty,
-            size: Size{width: zero(), height: zero()},
-            position: Point{x: zero(), y: zero()},
-            margin: Size{width: zero(), height: zero()},
+            size: Size::zero(),
+            position: Point::zero(),
+            margin: Size::zero(),
         }
     }
 
     /// Update camera position, moving as little as possible
-    pub fn aim_at(&mut self, target: Point<N>) {
+    pub fn aim_at(&mut self, target: Point) {
         // FIXME would like some more interesting features here like smoothly
         // catching up with the player, platform snapping?
 
-        let x0 = zero::<N>() + self.margin.width;
+        let x0 = 0 + self.margin.width;
         let x1 = self.size.width - self.margin.width;
         //local minx = self.map.camera_margin_left
         //local maxx = self.map.width - self.map.camera_margin_right - self.width
@@ -99,7 +52,7 @@ impl<N: Numberlike> Camera<N> {
             newx = target.x - x1;
         }
 
-        let y0 = zero::<N>() + self.margin.height;
+        let y0 = 0 + self.margin.height;
         let y1 = self.size.height - self.margin.height;
         //local miny = self.map.camera_margin_top
         //local maxy = self.map.height - self.map.camera_margin_bottom - self.height
@@ -119,8 +72,8 @@ impl<N: Numberlike> Camera<N> {
         */
 
         if let Bounds::BBox(ref bbox) = self.bounds {
-            newx = clamp(newx, bbox.x0(), bbox.x1() - self.size.width);
-            newy = clamp(newy, bbox.y0(), bbox.y1() - self.size.height);
+            newx = clamp(newx, bbox.min_x(), bbox.max_x() - self.size.width);
+            newy = clamp(newy, bbox.min_y(), bbox.max_y() - self.size.height);
         }
         // TODO when i switch to fixed?
         //self.x = math.floor(newx)
