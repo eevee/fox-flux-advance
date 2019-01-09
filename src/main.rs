@@ -5,8 +5,9 @@ extern crate euclid;
 extern crate gba;
 extern crate num_traits;
 
-pub mod data;
-pub mod geom;
+mod data;
+mod fixed;
+mod geom;
 
 
 #[panic_handler]
@@ -44,11 +45,9 @@ pub const BG1HOFS: VolAddress<u16> = unsafe { VolAddress::new_unchecked(0x400_00
 pub const BG1VOFS: VolAddress<u16> = unsafe { VolAddress::new_unchecked(0x400_0016) };
 
 
-use euclid::{point2, rect, size2};
-
 use crate::data::PALETTE;
 use crate::data::places::TEST_PLACE;
-use crate::geom::{Camera, Point, Rect, Size};
+use crate::geom::{Camera, Point, Rect, Size, point2, rect, size2};
 
 #[start]
 fn main(_argc: isize, _argv: *const *const u8) -> isize {
@@ -130,10 +129,12 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
         // screen than the bottom
         game.camera.aim_at(lexy.position);
 
-        BG0HOFS.write(game.camera.position.x as u16);
-        BG0VOFS.write(game.camera.position.y as u16);
-        BG1HOFS.write(game.camera.position.x as u16);
-        BG1VOFS.write(game.camera.position.y as u16);
+        let cam_x = game.camera.position.x.to_int_round() as u16;
+        let cam_y = game.camera.position.y.to_int_round() as u16;
+        BG0HOFS.write(cam_x);
+        BG0VOFS.write(cam_y);
+        BG1HOFS.write(cam_x);
+        BG1VOFS.write(cam_y);
     }
 }
 
@@ -218,7 +219,7 @@ impl Entity for Lexy {
             let mut edge = self.position.y + self.bbox.max_y();
             let mut to_next_tile = TILE_SIZE - edge % TILE_SIZE;
             if to_next_tile == TILE_SIZE {
-                to_next_tile = 0;
+                to_next_tile = 0.into();
             }
             
             if dy < to_next_tile {
@@ -229,9 +230,9 @@ impl Entity for Lexy {
                 edge += to_next_tile;
                 dy -= to_next_tile;
                 while dy > 0 {
-                    let tid = TEST_PLACE.tiles[(edge / TILE_SIZE) as usize][(self.position.x / TILE_SIZE) as usize];
+                    let tid = TEST_PLACE.tiles[edge.to_tile_coord()][self.position.x.to_tile_coord()];
                     if TEST_PLACE.tileset.tiles[tid as usize].solid {
-                        self.velocity.y = 0;
+                        self.velocity.y = 0.into();
                         break;
                     }
                     if dy >= TILE_SIZE {
@@ -258,7 +259,7 @@ impl Entity for Lexy {
                 edge -= to_next_tile;
                 dy -= to_next_tile;
                 while dy > 0 {
-                    let tid = TEST_PLACE.tiles[(edge / TILE_SIZE) as usize][(self.position.x / TILE_SIZE) as usize];
+                    let tid = TEST_PLACE.tiles[edge.to_tile_coord()][self.position.x.to_tile_coord()];
                     if TEST_PLACE.tileset.tiles[tid as usize].solid {
                         break;
                     }
@@ -278,8 +279,8 @@ impl Entity for Lexy {
         let sx = self.position.x - (if self.facing_left { 32 - self.anchor.x } else { self.anchor.x }) - game.camera.position.x;
         let sy = self.position.y - self.anchor.y - game.camera.position.y;
         unsafe {
-            (0x0700_0000 as *mut u16).write_volatile((sy + 256) as u16 & 0xffu16 | 0x2000u16 | 0x8000u16);
-            (0x0700_0002 as *mut u16).write_volatile((sx + 512) as u16 & 0x1ffu16 | 0xc000u16 | if self.facing_left { 0x1000u16 } else { 0u16 });
+            (0x0700_0000 as *mut u16).write_volatile(sy.to_sprite_offset_y() | 0x2000u16 | 0x8000u16);
+            (0x0700_0002 as *mut u16).write_volatile(sx.to_sprite_offset_x() | 0xc000u16 | if self.facing_left { 0x1000u16 } else { 0u16 });
             (0x0700_0004 as *mut u16).write_volatile(0u16 | 0x0400u16);
         }
     }
@@ -289,16 +290,17 @@ fn step(game: &mut Game, lexy: &mut Lexy) {
     let input = read_key_input();
 
     if input.left() {
-        lexy.velocity.x = -2;
+        lexy.velocity.x = (-3).into();
         lexy.facing_left = true;
     }
     else if input.right() {
-        lexy.velocity.x = 2;
+        lexy.velocity.x = 3.into();
         lexy.facing_left = false;
     }
     else {
-        lexy.velocity.x = 0;
+        lexy.velocity.x = 0.into();
     }
+    lexy.velocity.x /= 2;
 
     if input.up() {
         if lexy.velocity.y == 0 {

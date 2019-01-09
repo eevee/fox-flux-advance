@@ -1,15 +1,49 @@
 use euclid::{TypedPoint2D, TypedRect, TypedSize2D, TypedVector2D};
 use num_traits::clamp;
 
-pub type Unit = i16;
+use crate::fixed::Fixed;
+//use fpa::I24F8;
+
+pub type ScreenPixel = u16;
+pub type WorldUnit = Fixed;
+pub type WorldStorage = i32;
+pub type WorldWhole = i16;
 pub struct ScreenSpace;
 pub struct WorldSpace;
 
-pub type Point = TypedPoint2D<Unit, WorldSpace>;
-pub type Rect = TypedRect<Unit, WorldSpace>;
-pub type Size = TypedSize2D<Unit, WorldSpace>;
-pub type Vector = TypedVector2D<Unit, WorldSpace>;
+pub type Point = TypedPoint2D<WorldUnit, WorldSpace>;
+pub type Rect = TypedRect<WorldUnit, WorldSpace>;
+pub type Size = TypedSize2D<WorldUnit, WorldSpace>;
+pub type Vector = TypedVector2D<WorldUnit, WorldSpace>;
 
+pub trait RectExt {
+    fn touches(&self, other: &Self) -> bool;
+}
+
+impl RectExt for Rect {
+    /// Like `TypedRect::intersects`, but also returns true if only the edges coincide.
+    #[inline]
+    fn touches(&self, other: &Self) -> bool {
+        self.origin.x <= other.origin.x + other.size.width &&
+       other.origin.x <=  self.origin.x + self.size.width &&
+        self.origin.y <= other.origin.y + other.size.height &&
+       other.origin.y <=  self.origin.y + self.size.height
+    }
+}
+
+// Versions of the euclid helper functions that also perform fixed conversion
+pub fn rect(x: WorldWhole, y: WorldWhole, w: WorldWhole, h: WorldWhole) -> Rect {
+    euclid::rect(x.into(), y.into(), w.into(), h.into())
+}
+pub fn point2(x: WorldWhole, y: WorldWhole) -> Point {
+    euclid::point2(x.into(), y.into())
+}
+pub fn size2(w: WorldWhole, h: WorldWhole) -> Size {
+    euclid::size2(w.into(), h.into())
+}
+pub fn vec2(x: WorldWhole, y: WorldWhole) -> Vector {
+    euclid::vec2(x.into(), y.into())
+}
 
 #[derive(Clone, Copy)]
 pub enum Bounds {
