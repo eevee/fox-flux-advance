@@ -10,8 +10,15 @@ pub mod geom;
 
 
 #[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
-  loop {}
+fn panic(panic_info: &core::panic::PanicInfo) -> ! {
+    use gba::mgba::{MGBADebug, MGBADebugLevel};
+    use core::fmt::Write;
+    if let Some(mut debug) = MGBADebug::new() {
+        write!(debug, "panic: {}", panic_info).unwrap();
+        debug.send(MGBADebugLevel::Error);
+    }
+
+    loop {}
 }
 
 #[lang = "eh_personality"] fn eh_personality() {}
