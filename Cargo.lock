@@ -3,6 +3,7 @@ name = "fox-flux-advance"
 version = "0.1.0"
 dependencies = [
  "gba 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num-traits 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -23,6 +24,11 @@ dependencies = [
  "quote 0.6.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "syn 0.15.23 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "num-traits"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "proc-macro2"
@@ -63,6 +69,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [metadata]
 "checksum gba 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "39ad8663f064b0edc890979af052d8f990c97a5320f59d8b770fd625669038f6"
 "checksum gba-proc-macro 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2cf87285990ee5c1165d24cc92d0cb5b4706c9e835e645850ef88acb811d25ac"
+"checksum num-traits 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "0b3a5d7cc97d6d30d8b9bc8fa19bf45349ffe46241e8816f50f62f6d6aaabee1"
 "checksum proc-macro2 0.4.24 (registry+https://github.com/rust-lang/crates.io-index)" = "77619697826f31a02ae974457af0b29b723e5619e113e9397b8b82c6bd253f09"
 "checksum quote 0.6.10 (registry+https://github.com/rust-lang/crates.io-index)" = "53fa22a1994bd0f9372d7a816207d8a2677ad0325b073f5c5332760f0fb62b5c"
 "checksum syn 0.15.23 (registry+https://github.com/rust-lang/crates.io-index)" = "9545a6a093a3f0bd59adb472700acc08cad3776f860f16a897dfce8c88721cbc"

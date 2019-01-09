@@ -3,6 +3,11 @@
 #![feature(lang_items)]
 
 extern crate gba;
+extern crate num_traits;
+
+pub mod data;
+pub mod geom;
+
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
@@ -21,10 +26,14 @@ use gba::{
         display::{DisplayControlSetting, DISPCNT, spin_until_vblank, spin_until_vdraw},
         keypad::{read_key_input},
     },
+    oam::{write_obj_attributes},
     palram::index_palram_bg_4bpp,
     vram::{text::TextScreenblockEntry, Tile4bpp, CHAR_BASE_BLOCKS, SCREEN_BASE_BLOCKS},
+    mgba::{MGBADebug, MGBADebugLevel},
     Color,
 };
+use core::fmt::Write;
+
 
 // NOTE: these are also defined in gba.rs, but the addresses are wrong in 0.3.0
 /// BG1 X-Offset. Write only. Text mode only. 9 bits.
@@ -33,6 +42,14 @@ pub const BG1HOFS: VolAddress<u16> = unsafe { VolAddress::new_unchecked(0x400_00
 pub const BG1VOFS: VolAddress<u16> = unsafe { VolAddress::new_unchecked(0x400_0016) };
 
 
+
+
+// geom types
+pub type Unit = i16;
+
+
+use crate::data::places::TEST_PLACE;
+use crate::geom::{Camera, Point};
 
 #[start]
 fn main(_argc: isize, _argv: *const *const u8) -> isize {
@@ -64,6 +81,7 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
             ((0x0601_0000 + p * 2) as *mut u16).write_volatile(lexydata[p * 2 + 0x80] as u16 | (lexydata[p * 2 + 0x80 + 1] as u16) << 8);
         }
 
+        //write_obj_attributes(...)
         (0x0700_0000 as *mut u16).write_volatile(64u16 | 0x2000u16 | 0x8000u16);
         (0x0700_0002 as *mut u16).write_volatile(32u16 | 0xc000u16);
         (0x0700_0004 as *mut u16).write_volatile(0u16 | 0x0400u16);
@@ -95,6 +113,7 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
   let dark_entry = TextScreenblockEntry::from_tile_id(1);
 
   //checker_screenblock(8, light_entry, dark_entry);
+  /*
   let mut p = unsafe { SCREEN_BASE_BLOCKS.index(8).cast::<TextScreenblockEntry>() };
   unsafe { p = p.offset(32 * (20 - 8)); }
   for row in 0..4 {
@@ -155,6 +174,18 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
       }
     }
   }
+  */
+
+  let mut p = unsafe { SCREEN_BASE_BLOCKS.index(8).cast::<TextScreenblockEntry>() };
+  for row in &TEST_PLACE.tiles {
+    for &tid in row {
+      let tse = TextScreenblockEntry::from_tile_id(tid as u16);
+      unsafe {
+        p.write(tse);
+        p = p.offset(1);
+      }
+    }
+  }
 
   // bg0 control
   BG0CNT.write(BackgroundControlSetting::new().with_screen_base_block(8).with_bg_priority(1).with_is_8bpp(true));
@@ -163,59 +194,81 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
 DISPCNT.write(DisplayControlSetting::new().with_bg0(true).with_bg1(true).with_obj(true).with_oam_memory_1d(true));
 
 
-    let mut game = Game{ camera_x: 0, camera_y: 0 };
+    let mut game = Game{ camera: Camera::new() };
+    game.camera.bounds = crate::geom::Bounds::BBox(crate::geom::AABB{ topleft: crate::geom::Point{x: 0, y: 0}, size: crate::geom::Size{width: 1024, height: 1024} });
+    game.camera.size = crate::geom::Size{ width: 240, height: 160 };
+    game.camera.margin = crate::geom::Size{ width: 64, height: 32 };
+    let mut lexy = Lexy{ position: Point{ x: 48, y: 80 }, velocity: Point{ x: 0, y: 2 }, anchor: Point{ x: 17, y: 47 } };
     loop {
         spin_until_vdraw();
         spin_until_vblank();
-        step(&mut game);
+        step(&mut game, &mut lexy);
+        lexy.update(&game);
+
+        // UPDATE CAMERA
+        let (x, y) = (game.camera.position.x, game.camera.position.y);
+        // TODO maybe aim at lexy's eyes or something, atm she can get closer to the top of the
+        // screen than the bottom
+        game.camera.aim_at(lexy.position);
+
+        BG0HOFS.write(game.camera.position.x as u16);
+        BG0VOFS.write(game.camera.position.y as u16);
+        BG1HOFS.write(game.camera.position.x as u16);
+        BG1VOFS.write(game.camera.position.y as u16);
+        let (x2, y2) = (game.camera.position.x, game.camera.position.y);
+        if let Some(mut debug) = MGBADebug::new() {
+            write!(debug, "camera: {} {} -> {} {} via {} {}", x, y, x2, y2, lexy.position.x, lexy.position.y);
+            debug.send(MGBADebugLevel::Debug);
+        }
     }
 }
 
 struct Game {
-    camera_x: u16,
-    camera_y: u16,
+    camera: Camera<i16>,
 }
 
-fn step(game: &mut Game) {
+trait Entity {
+    fn update(&mut self, game: &Game);
+}
+
+struct Lexy {
+    position: Point<Unit>,
+    velocity: Point<Unit>,
+    anchor: Point<Unit>,
+}
+
+impl Entity for Lexy {
+    fn update(&mut self, game: &Game) {
+        self.position.x += self.velocity.x;
+        self.position.y += self.velocity.y;
+
+        // update position i guess?  assumes slot 0!
+        // TODO apply camera offset
+        unsafe {
+            (0x0700_0000 as *mut u16).write_volatile((self.position.y - self.anchor.y - game.camera.position.y + 256) as u16 & 0xffu16 | 0x2000u16 | 0x8000u16);
+            (0x0700_0002 as *mut u16).write_volatile((self.position.x - self.anchor.x - game.camera.position.x + 512) as u16 & 0x1ffu16 | 0xc000u16);
+            (0x0700_0004 as *mut u16).write_volatile(0u16 | 0x0400u16);
+        }
+    }
+}
+
+fn step(game: &mut Game, lexy: &mut Lexy) {
     let input = read_key_input();
 
+    lexy.velocity.x = 0;
+    lexy.velocity.y = 0;
     if input.left() {
-        if game.camera_x == 0 {
-            game.camera_x = 255;
-        }
-        else {
-            game.camera_x -= 1;
-        }
+        lexy.velocity.x = -1;
     }
     if input.right() {
-        if game.camera_x >= 255 {
-            game.camera_x = 0;
-        }
-        else {
-            game.camera_x += 1;
-        }
+        lexy.velocity.x = 1;
     }
     if input.up() {
-        if game.camera_y == 0 {
-            game.camera_y = 255;
-        }
-        else {
-            game.camera_y -= 1;
-        }
+        lexy.velocity.y = -1;
     }
     if input.down() {
-        if game.camera_y >= 255 {
-            game.camera_y = 0;
-        }
-        else {
-            game.camera_y += 1;
-        }
+        lexy.velocity.y = 1;
     }
-
-    BG0HOFS.write(game.camera_x);
-    BG0VOFS.write(game.camera_y);
-    BG1HOFS.write(game.camera_x);
-    BG1VOFS.write(game.camera_y);
 }
 
 pub const ALL_TWOS: Tile4bpp = Tile4bpp([
