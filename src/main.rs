@@ -15,14 +15,24 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 use core::intrinsics::transmute;
 use gba::io::display::{DisplayMode};
 use gba::{
-  io::{
-    background::{BackgroundControlSetting, BG0CNT, BG1CNT},
-    display::{DisplayControlSetting, DISPCNT},
-  },
-  palram::index_palram_bg_4bpp,
-  vram::{text::TextScreenblockEntry, Tile4bpp, CHAR_BASE_BLOCKS, SCREEN_BASE_BLOCKS},
-  Color,
+    base::volatile::VolAddress,
+    io::{
+        background::{BackgroundControlSetting, BG0CNT, BG1CNT, BG0HOFS, BG0VOFS},
+        display::{DisplayControlSetting, DISPCNT, spin_until_vblank, spin_until_vdraw},
+        keypad::{read_key_input},
+    },
+    palram::index_palram_bg_4bpp,
+    vram::{text::TextScreenblockEntry, Tile4bpp, CHAR_BASE_BLOCKS, SCREEN_BASE_BLOCKS},
+    Color,
 };
+
+// NOTE: these are also defined in gba.rs, but the addresses are wrong in 0.3.0
+/// BG1 X-Offset. Write only. Text mode only. 9 bits.
+pub const BG1HOFS: VolAddress<u16> = unsafe { VolAddress::new_unchecked(0x400_0014) };
+/// BG1 Y-Offset. Write only. Text mode only. 9 bits.
+pub const BG1VOFS: VolAddress<u16> = unsafe { VolAddress::new_unchecked(0x400_0016) };
+
+
 
 #[start]
 fn main(_argc: isize, _argv: *const *const u8) -> isize {
@@ -153,7 +163,59 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
 DISPCNT.write(DisplayControlSetting::new().with_bg0(true).with_bg1(true).with_obj(true).with_oam_memory_1d(true));
 
 
-    loop {}
+    let mut game = Game{ camera_x: 0, camera_y: 0 };
+    loop {
+        spin_until_vdraw();
+        spin_until_vblank();
+        step(&mut game);
+    }
+}
+
+struct Game {
+    camera_x: u16,
+    camera_y: u16,
+}
+
+fn step(game: &mut Game) {
+    let input = read_key_input();
+
+    if input.left() {
+        if game.camera_x == 0 {
+            game.camera_x = 255;
+        }
+        else {
+            game.camera_x -= 1;
+        }
+    }
+    if input.right() {
+        if game.camera_x >= 255 {
+            game.camera_x = 0;
+        }
+        else {
+            game.camera_x += 1;
+        }
+    }
+    if input.up() {
+        if game.camera_y == 0 {
+            game.camera_y = 255;
+        }
+        else {
+            game.camera_y -= 1;
+        }
+    }
+    if input.down() {
+        if game.camera_y >= 255 {
+            game.camera_y = 0;
+        }
+        else {
+            game.camera_y += 1;
+        }
+    }
+
+    BG0HOFS.write(game.camera_x);
+    BG0VOFS.write(game.camera_y);
+    BG1HOFS.write(game.camera_x);
+    BG1VOFS.write(game.camera_y);
 }
 
 pub const ALL_TWOS: Tile4bpp = Tile4bpp([
