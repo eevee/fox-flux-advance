@@ -4,6 +4,11 @@ version = "0.1.0"
 authors = ["Eevee (Evelyn Woods) <eevee.git@veekun.com>"]
 edition = "2018"
 
+[profile.dev]
+# the gba is not a speed machine and i need some level of inlining on my
+# pointer methods or it's unplayable
+opt-level = 1
+
 [dependencies]
 gba = "^0.3.0"
 

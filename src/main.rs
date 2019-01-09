@@ -55,7 +55,6 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
     let disp = DisplayControlSetting::new().with_mode(DisplayMode::Mode2).with_oam_memory_1d(true).with_obj(true);
     DISPCNT.write(disp);
 
-    let lexydata = include_bytes!("../target/assets/lexy.bin");
     let tiledata = include_bytes!("../target/assets/terrain.bin");
 
     // TODO oam_init, blanks out OAM
@@ -73,12 +72,7 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
         while (0x0400_0006 as *mut u16).read_volatile() >= 160 {}
         while (0x0400_0006 as *mut u16).read_volatile() < 160 {}
 
-        // SPRITE
-        for p in 0usize..0x400usize {
-            ((0x0200_0000) as *mut u16).write_volatile(p as u16);
-            ((0x0200_0002 + p * 2) as *mut u16).write_volatile(lexydata[p * 2] as u16 | (lexydata[p * 2 + 1] as u16) << 8);
-            ((0x0601_0000 + p * 2) as *mut u16).write_volatile(lexydata[p * 2] as u16 | (lexydata[p * 2 + 1] as u16) << 8);
-        }
+        update_lexy_sprite(0);
 
         //write_obj_attributes(...)
         (0x0700_0000 as *mut u16).write_volatile(64u16 | 0x2000u16 | 0x8000u16);
@@ -122,6 +116,8 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
         anchor: point2(17, 47),
         bbox: rect(-6, -26, 12, 27),
         facing_left: false,
+        sprite_index: 0,
+        sprite_timer: 0,
     };
     loop {
         spin_until_vdraw();
@@ -138,6 +134,19 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
         BG0VOFS.write(game.camera.position.y as u16);
         BG1HOFS.write(game.camera.position.x as u16);
         BG1VOFS.write(game.camera.position.y as u16);
+    }
+}
+
+static LEXY_SPRITES: [u8; 49152] = *include_bytes!("../target/assets/lexy.bin");
+fn update_lexy_sprite(sprite_index: usize) {
+    // SPRITE
+    let offset = sprite_index * 0x400;
+    unsafe {
+        let mut ptr = 0x0601_0000 as *mut u16;
+        for p in offset .. (offset + 0x400) {
+            ptr.write_volatile(LEXY_SPRITES[p * 2] as u16 | (LEXY_SPRITES[p * 2 + 1] as u16) << 8);
+            ptr = ptr.offset(1);
+        }
     }
 }
 
@@ -167,12 +176,35 @@ struct Lexy {
     anchor: Point,
     bbox: Rect,
     facing_left: bool,
+    sprite_index: usize,
+    sprite_timer: usize,
 }
 
 impl Entity for Lexy {
     fn update(&mut self, game: &Game) {
         // gravity or whatever
         self.velocity.y += 1;
+
+        let old_sprite_index = self.sprite_index;
+        if self.velocity.x == 0 {
+            self.sprite_index = 0;
+            self.sprite_timer = 0;
+        }
+        else {
+            if self.sprite_timer == 0 {
+                self.sprite_index += 1;
+                if self.sprite_index > 8 {
+                    self.sprite_index = 1;
+                }
+                self.sprite_timer = 4;
+            }
+            else {
+                self.sprite_timer -= 1;
+            }
+        }
+        if self.sprite_index != old_sprite_index {
+            update_lexy_sprite(self.sprite_index);
+        }
 
         let dx = self.velocity.x;
         let mut dy = self.velocity.y;
@@ -257,11 +289,11 @@ fn step(game: &mut Game, lexy: &mut Lexy) {
     let input = read_key_input();
 
     if input.left() {
-        lexy.velocity.x = -3;
+        lexy.velocity.x = -2;
         lexy.facing_left = true;
     }
     else if input.right() {
-        lexy.velocity.x = 3;
+        lexy.velocity.x = 2;
         lexy.facing_left = false;
     }
     else {
