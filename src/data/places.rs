@@ -1,6 +1,7 @@
 pub const TILE_SIZE: usize = 8;
 pub const MAX_PLACE_DIMENSION: usize = 32;
 
+// TODO maybe use Tile8bpp here?
 pub struct Tile {
   pub pixels: [[u8; TILE_SIZE]; TILE_SIZE],
   pub solid: bool,
