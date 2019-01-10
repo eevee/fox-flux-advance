@@ -138,16 +138,22 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
     }
 }
 
+// TODO enforce that the sprite data is aligned; use aligned crate?  then i guess put a nicer
+// wrapper on this
+use gba::io::dma;
 static LEXY_SPRITES: [u8; 49152] = *include_bytes!("../target/assets/lexy.bin");
 fn update_lexy_sprite(sprite_index: usize) {
     // SPRITE
     let offset = sprite_index * 0x400;
     unsafe {
-        let mut ptr = 0x0601_0000 as *mut u16;
-        for p in offset .. (offset + 0x400) {
-            ptr.write_volatile(LEXY_SPRITES[p * 2] as u16 | (LEXY_SPRITES[p * 2 + 1] as u16) << 8);
-            ptr = ptr.offset(1);
-        }
+        dma::DMA3::set_source((&LEXY_SPRITES as *const u8).offset(sprite_index as isize * 0x800) as *const u32);
+        dma::DMA3::set_dest(0x0601_0000 as *mut u32);
+        dma::DMA3::set_count(0x800 / 4);
+        dma::DMA3::set_control(
+            dma::DMAControlSetting::new()
+            .with_use_32bit(true)
+            .with_enabled(true)
+        );
     }
 }
 
