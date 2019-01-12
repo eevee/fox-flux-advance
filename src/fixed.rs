@@ -3,7 +3,7 @@
 /// For various reasons, existing crates won't work.
 
 use euclid::num::{Ceil, Floor, Round, One, Zero};
-use gba::bios::sqrt;
+use gba::bios;
 
 use core::cmp;
 use core::fmt;
@@ -49,7 +49,7 @@ impl Fixed {
 
     pub fn sqrt(self) -> Self {
         // XXX what if i'm negative?  i guess this cast will explode then anyway
-        Self((sqrt(self.0 as u32) as i32) >> (Self::FRACTIONAL_BITS / 2))
+        Self((bios::sqrt(self.0 as u32) as i32) >> (Self::FRACTIONAL_BITS / 2))
     }
 
     pub fn to_int_floor(self) -> FixedWhole {
@@ -171,7 +171,7 @@ impl ops::Div<Fixed> for Fixed {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
-        Self((self.0 << Self::FRACTIONAL_BITS) / other.0)
+        Self(bios::div(self.0 << Self::FRACTIONAL_BITS, other.0))
     }
 }
 
@@ -185,7 +185,7 @@ impl ops::Rem<Fixed> for Fixed {
     type Output = Self;
 
     fn rem(self, other: Self) -> Self {
-        Fixed(self.0 % other.0)
+        Fixed(bios::rem(self.0, other.0))
     }
 }
 
