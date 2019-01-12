@@ -3,8 +3,10 @@
 /// For various reasons, existing crates won't work.
 
 use euclid::num::{Ceil, Floor, Round, One, Zero};
+use gba::bios::sqrt;
 
 use core::cmp;
+use core::fmt;
 use core::ops;
 
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
@@ -17,7 +19,7 @@ type FixedFraction = u16;
 const TILE_SIZE_BITS: usize = 3;
 
 impl Fixed {
-    pub const FRACTIONAL_BITS: usize = 16;
+    pub const FRACTIONAL_BITS: usize = 8;
     pub const PRECISION: FixedFraction = 1;
     pub const MAX_FRACTION: FixedFraction = ((1usize << Self::FRACTIONAL_BITS) - 1) as FixedFraction;
 
@@ -25,8 +27,29 @@ impl Fixed {
         Self((n as FixedStore) << Self::FRACTIONAL_BITS)
     }
 
+    pub const fn from_bits(n: FixedStore) -> Self {
+        Self(n)
+    }
+
+    pub fn min_value() -> Self {
+        Self(FixedStore::min_value())
+    }
+
+    pub fn max_value() -> Self {
+        Self(FixedStore::max_value())
+    }
+
     pub fn max_fraction() -> Self {
         Self(Self::MAX_FRACTION as FixedStore)
+    }
+
+    pub fn abs(self) -> Self {
+        Self(self.0.abs())
+    }
+
+    pub fn sqrt(self) -> Self {
+        // XXX what if i'm negative?  i guess this cast will explode then anyway
+        Self((sqrt(self.0 as u32) as i32) >> (Self::FRACTIONAL_BITS / 2))
     }
 
     pub fn to_int_floor(self) -> FixedWhole {
@@ -51,6 +74,12 @@ impl Fixed {
     pub fn to_sprite_offset_y(self) -> u16 {
         // TODO what if i'm too big or small
         (self.to_int_round() + 256) as u16 & 0x00ffu16
+    }
+}
+
+impl fmt::Debug for Fixed {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "{:?}:{:?}", self.to_int_floor(), self.0 as FixedFraction & Fixed::MAX_FRACTION)
     }
 }
 
@@ -108,12 +137,25 @@ impl ops::SubAssign<Fixed> for Fixed {
     }
 }
 
+impl ops::Mul<Fixed> for Fixed {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self {
+        Self((self.0 * other.0) >> Self::FRACTIONAL_BITS)
+    }
+}
+
+impl ops::MulAssign<Fixed> for Fixed {
+    fn mul_assign(&mut self, other: Self) {
+        self.0 = self.0 * other.0 >> Self::FRACTIONAL_BITS;
+    }
+}
+
 impl ops::Div<Fixed> for Fixed {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
-        // FIXME what about fractional bits...?
-        Self::promote((self.0 / other.0) as i16)
+        Self((self.0 << Self::FRACTIONAL_BITS) / other.0)
     }
 }
 
@@ -181,6 +223,20 @@ impl ops::Sub<Fixed> for FixedWhole {
 impl ops::SubAssign<FixedWhole> for Fixed {
     fn sub_assign(&mut self, other: FixedWhole) {
         *self -= Self::promote(other)
+    }
+}
+
+impl ops::Mul<FixedWhole> for Fixed {
+    type Output = Self;
+
+    fn mul(self, other: FixedWhole) -> Self {
+        Self(self.0 * other as i32)
+    }
+}
+
+impl ops::MulAssign<FixedWhole> for Fixed {
+    fn mul_assign(&mut self, other: FixedWhole) {
+        *self = *self * other;
     }
 }
 

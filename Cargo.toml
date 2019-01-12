@@ -12,11 +12,15 @@ opt-level = 1
 [dependencies]
 gba = "^0.3.0"
 
-[dependencies.num-traits]
-version = "^0.2"
+[dependencies.arrayvec]
+version = "^0.4"
 default-features = false
 
 [dependencies.euclid]
 git = "https://github.com/servo/euclid"
 branch = "no-std"
+default-features = false
+
+[dependencies.num-traits]
+version = "^0.2"
 default-features = false

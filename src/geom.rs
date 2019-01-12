@@ -31,6 +31,34 @@ impl RectExt for Rect {
     }
 }
 
+pub trait VectorExt<T> {
+    // Methods from euclid that assume T is a float
+    fn length(&self) -> T;
+    fn normalize(self) -> Self;
+
+    // Local additions
+    fn perpendicular(self) -> Self;
+    fn project_on(self, axis: Self) -> Self;
+}
+
+impl VectorExt<WorldUnit> for Vector {
+    fn length(&self) -> WorldUnit {
+        self.square_length().sqrt()
+    }
+    fn normalize(self) -> Self {
+        self / self.length()
+    }
+
+    // Local additions
+    fn perpendicular(self) -> Self {
+        Self::new(self.y, -self.x)
+    }
+
+    fn project_on(self, axis: Self) -> Self {
+        axis * self.dot(axis) / axis.square_length()
+    }
+}
+
 // Versions of the euclid helper functions that also perform fixed conversion
 pub fn rect(x: WorldWhole, y: WorldWhole, w: WorldWhole, h: WorldWhole) -> Rect {
     euclid::rect(x.into(), y.into(), w.into(), h.into())
