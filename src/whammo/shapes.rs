@@ -420,93 +420,98 @@ impl Polygon {
                 axis = -axis;
                 fullaxis = -fullaxis;
             }
-            if dist >= 0 {
-                // This dot product is positive if we're moving closer along this
-                // axis, negative if we're moving away
-                let dot = fudge_to_zero(movement.dot(fullaxis));
 
-                if dot < 0 || (dot == 0 && dist > 0) {
-                    // Even if the shapes are already touching, they're not moving
-                    // closer together, so they can't possibly collide.  Stop here.
-                    // FIXME this means collision detection is not useful for finding touches
-                    return None;
-                }
-                else if dist == 0 && dot == 0 {
-                    // Zero dot and zero distance mean the movement is parallel
-                    // and the shapes can slide against each other.  But we still
-                    // need to check other axes to know if they'll actually touch.
-                    slide_axis = Some(fullaxis);
-                }
-                else {
-                    // Figure out how much movement is allowed, as a fraction.
-                    // Conceptually, the answer is the movement projected onto the
-                    // axis, divided by the separation projected onto the same
-                    // axis.  Stuff cancels, and it turns out to be just the ratio
-                    // of dot products (which makes sense).  Vectors are neat.
-                    // Note that slides are meaningless here; a shape could move
-                    // perpendicular to the axis forever without hitting anything.
-                    let numer = sep.dot(fullaxis);
-                    let amount = fudge_to_zero(numer / dot);
+            // Negative distance means the shapes overlap from this perspective, which is
+            // inconclusive
+            if dist < 0 {
+              continue;
+            }
 
-                    let use_normal;
-                    // TODO i think i could avoid this entirely by using a cross
-                    // product instead?
-                    // FIXME i had to fix this here, so fix it in LÖVE too.  but also in fact, uh,
-                    // maybe write some tests and rejigger this code a bit too
-                    if maxamt > Fixed::min_value() && (amount - maxamt).abs() < PRECISION {
-                        // Equal, ish
-                        use_normal = true;
-                    }
-                    else if amount > maxamt {
-                        maxamt = amount;
-                        maxnumer = numer;
-                        maxdenom = dot;
-                        // XXX normals normals = {};
-                        left_norm = None;
-                        right_norm = None;
-                        left_max_dot = Fixed::min_value();
-                        right_max_dot = Fixed::min_value();
-                        use_normal = true;
-                    }
-                    else {
-                        use_normal = false;
-                    }
+            // Update touchtype
+            if dist > 0 {
+                touchtype = Contact::Collide;
+            }
+            // XXX excuse me what
+            else if touchtype == Contact::Overlap {
+                touchtype = Contact::Touch;
+            }
 
-                    if use_normal /* XXX && ! fullaxis._is_move_normal */ {
-                        // FIXME these are no longer de-duplicated, hmm
-                        let normal = -fullaxis;
-                        // XXX normals normals[normal] = -axis;
+            // This dot product is positive if we're moving closer along this
+            // axis, negative if we're moving away
+            let dot = fudge_to_zero(movement.dot(fullaxis));
 
-                        let ourdot = -(movement.dot(axis));
+            if dot < 0 || (dot == 0 && dist > 0) {
+                // Even if the shapes are already touching, they're not moving
+                // closer together, so they can't possibly collide.  Stop here.
+                // FIXME this means collision detection is not useful for finding touches
+                return None;
+            }
+            else if dist == 0 && dot == 0 {
+                // Zero dot and zero distance mean the movement is parallel
+                // and the shapes can slide against each other.  But we still
+                // need to check other axes to know if they'll actually touch.
+                slide_axis = Some(fullaxis);
+                continue;
+            }
 
-                        // Determine if this normal is on our left or right
-                        let perpdot = movenormal.dot(normal);
-                        if ourdot > 0 {
-                            // Do nothing; this normal faces away from us?
-                        }
-                        else {
-                            // TODO explain this better, but the idea is: using the greater dot means using the slope that's furthest away from us, which resolves corners nicely because two normals on one side HAVE to be a corner, they can't actually be one in front of the other
-                            // TODO should these do something on a tie?
-                            if perpdot <= PRECISION && ourdot > left_max_dot {
-                                left_norm = Some(normal);
-                                left_max_dot = ourdot;
-                            }
-                            if perpdot >= -PRECISION && ourdot > right_max_dot {
-                                right_norm = Some(normal);
-                                right_max_dot = ourdot;
-                            }
-                        }
-                    }
-                }
+            // Figure out how much movement is allowed, as a fraction.
+            // Conceptually, the answer is the movement projected onto the
+            // axis, divided by the separation projected onto the same
+            // axis.  Stuff cancels, and it turns out to be just the ratio
+            // of dot products (which makes sense).  Vectors are neat.
+            // Note that slides are meaningless here; a shape could move
+            // perpendicular to the axis forever without hitting anything.
+            let numer = sep.dot(fullaxis);
+            let amount = fudge_to_zero(numer / dot);
 
-                // Update touchtype
-                if dist > 0 {
-                    touchtype = Contact::Collide;
-                }
-                // XXX excuse me what
-                else if touchtype == Contact::Overlap {
-                    touchtype = Contact::Touch;
-                }
+            // TODO i think i could avoid this entirely by using a cross
+            // product instead?
+            // FIXME i had to fix this here, so fix it in LÖVE too.  but also in fact, uh,
+            // maybe write some tests and rejigger this code a bit too
+            if maxamt > Fixed::min_value() && (amount - maxamt).abs() < PRECISION {
+                // Equal, ish
+            }
+            else if amount > maxamt {
+                maxamt = amount;
+                maxnumer = numer;
+                maxdenom = dot;
+                // XXX normals normals = {};
+                left_norm = None;
+                right_norm = None;
+                left_max_dot = Fixed::min_value();
+                right_max_dot = Fixed::min_value();
+            }
+            else {
+                continue;
+            }
+
+            // XXX continue if this is a move normal
+            // Now all that's left to do is merge the collision normal with what we've got so
+            // far
+
+            // FIXME these are no longer de-duplicated, hmm
+            let normal = -fullaxis;
+            // XXX normals normals[normal] = -axis;
+
+            let ourdot = -(movement.dot(axis));
+            // Skip normals that face away from us
+            // XXX is this right, we could skip two iterations if we flipped it
+            if ourdot > 0 {
+                continue;
+            }
+
+            // Determine if this normal is on our left or right
+            let perpdot = movenormal.dot(normal);
+
+            // TODO explain this better, but the idea is: using the greater dot means using the slope that's furthest away from us, which resolves corners nicely because two normals on one side HAVE to be a corner, they can't actually be one in front of the other
+            // TODO should these do something on a tie?
+            if perpdot <= PRECISION && ourdot > left_max_dot {
+                left_norm = Some(normal);
+                left_max_dot = ourdot;
+            }
+            if perpdot >= -PRECISION && ourdot > right_max_dot {
+                right_norm = Some(normal);
+                right_max_dot = ourdot;
             }
         }
 
