@@ -116,14 +116,19 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
     game.camera.bounds = crate::geom::Bounds::BBox(rect(0, 0, 1024, 1024));
     game.camera.size = size2(240, 160);
     game.camera.margin = size2(64, 32);
-    let mut lexy = Lexy{
-        position: point2(48, 80),
-        velocity: vec2(0, 2),
-        anchor: point2(17, 47),
-        bbox: rect(-6, -26, 12, 27),
-        facing_left: false,
-        sprite_index: 0,
-        sprite_timer: 0,
+    let mut lexy = {
+        let position = point2(48, 80);
+        let bbox = rect(-6, -26, 12, 27);
+        Lexy{
+            position,
+            velocity: vec2(0, 0),
+            anchor: point2(17, 47),
+            bbox,
+            shape: Polygon::from_rect(bbox.translate(&position.to_vector())),
+            facing_left: false,
+            sprite_index: 0,
+            sprite_timer: 0,
+        }
     };
 
     let timer_disabled = TimerControlSetting::new().with_tick_rate(TimerTickRate::CPU64);
@@ -132,6 +137,7 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
     loop {
         spin_until_vdraw();
         spin_until_vblank();
+        spew!("--- VBLANK ---");
 
         // Reset the timer by disabling and enabling it
         TM0CNT_H.write(timer_disabled);
@@ -151,6 +157,8 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
         BG0VOFS.write(cam_y);
         BG1HOFS.write(cam_x);
         BG1VOFS.write(cam_y);
+
+        spew_time!("loop iter");
     }
 }
 
@@ -180,7 +188,7 @@ struct Game {
 trait Entity {
     fn update(&mut self, game: &Game);
     fn nudge(&mut self, displacement: Vector) -> Vector;
-    fn collider_sweep(&self, shape: &Polygon, attempted: Vector /*, pass_callback */) -> (Vector, CollisionVec);
+    fn collider_sweep(&self, shape: &Polygon, attempted: Vector, hits: &mut CollisionVec /*, pass_callback */) -> Vector;
 }
 
 struct Lexy {
@@ -188,6 +196,7 @@ struct Lexy {
     velocity: Vector,
     anchor: Point,
     bbox: Rect,
+    shape: Polygon,
     facing_left: bool,
     sprite_index: usize,
     sprite_timer: usize,
@@ -362,9 +371,8 @@ impl Entity for Lexy {
         }
     }
 
-    fn collider_sweep(&self, shape: &Polygon, attempted: Vector /*, pass_callback */) -> (Vector, CollisionVec) {
+    fn collider_sweep(&self, shape: &Polygon, attempted: Vector, collisions: &mut CollisionVec /*, pass_callback */) -> Vector {
         let xbbox = shape.extended_bbox(attempted);
-        let mut collisions = CollisionVec::new();
         // Check out the tilemap
         for ty in xbbox.min_y().to_tile_coord() .. (xbbox.max_y().to_tile_coord() + 1) {
             for tx in xbbox.min_x().to_tile_coord() .. (xbbox.max_x().to_tile_coord() + 1) {
@@ -374,13 +382,14 @@ impl Entity for Lexy {
                     continue;
                 }
 
+                // FIXME merely constructing one of these takes 0.4%, this is silly
                 let tile_polygon = Polygon::new([
                     point2(tx as i16 * 8, ty as i16 * 8),
                     point2(tx as i16 * 8 + 8, ty as i16 * 8),
                     point2(tx as i16 * 8 + 8, ty as i16 * 8 + 8),
                     point2(tx as i16 * 8, ty as i16 * 8 + 8),
                 ]);
-                let maybe_hit = shape.slide_towards(&tile_polygon, self.velocity);
+                let maybe_hit = shape.slide_towards(&tile_polygon, attempted);
                 if let Some(hit) = maybe_hit {
                     collisions.push(hit);
                 }
@@ -394,6 +403,7 @@ impl Entity for Lexy {
         // Look through the objects we'll hit, in the order we'll /touch/ them,
         // and stop at the first that blocks us
         let mut allowed_amount = None;
+        let mut allowed_movement = attempted;
         let mut trim_collisions_to = collisions.len();
         for (i, collision) in collisions.iter().enumerate() {
             // FIXME collision.attempted = attempted
@@ -436,6 +446,7 @@ impl Entity for Lexy {
             // If we're hitting the object and it's not passable, stop here
             if allowed_amount.is_none() && ! passable && collision.touchtype == Contact::Collide {
                 allowed_amount = Some(collision.amount);
+                allowed_movement = collision.movement;
             }
 
             // Log the last contact with each shape
@@ -447,20 +458,7 @@ impl Entity for Lexy {
             collisions.pop();
         }
 
-        match allowed_amount {
-            None => {
-                // We don't hit anything!  Return the entire movement
-                return (attempted, collisions);
-            }
-            Some(a) if a >= 1 => {
-                // We're moving towards something, but don't hit it
-                return (attempted, collisions);
-            }
-            Some(a) => {
-                // We do hit something.  Cap our movement proportionally
-                return (attempted * a, collisions);
-            }
-        }
+        return allowed_movement;
     }
 
     /// Move this entity through the world by some amount, respecting collision.  Returns the
@@ -479,25 +477,19 @@ impl Entity for Lexy {
         end
         */
 
-        let hitbox = self.bbox.translate(&self.position.to_vector());
-
         // Main movement loop!  Try to slide in the direction of movement; if that
         // fails, then try to project our movement along a surface we hit and
         // continue, until we hit something head-on or run out of movement.
         // TODO rename a LOT of these variables and properties, maybe in LÖVE too
         let mut total_movement = Vector::zero();
         let mut stuck_counter = 0;
+        let mut hits = CollisionVec::new();
         loop {
-            let lexy_polygon = Polygon::new([
-                hitbox.origin + total_movement,
-                hitbox.top_right() + total_movement,
-                hitbox.bottom_right() + total_movement,
-                hitbox.bottom_left() + total_movement,
-            ]);
-
             // TODO return hits up here?
-            let (successful, hits) = self.collider_sweep(&lexy_polygon, displacement /*, pass_callback */);
-            //self.shape:move(successful:unpack())
+            //let (successful, hits) = self.collider_sweep(&lexy_polygon, displacement /*, pass_callback */);
+            hits.clear();
+            let successful = self.collider_sweep(&self.shape, displacement, &mut hits /*, pass_callback */);
+            self.shape.move_by(successful);
             self.position += successful;
             total_movement += successful;
 

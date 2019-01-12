@@ -1,5 +1,7 @@
+use arrayvec::ArrayVec;
+
 use crate::fixed::Fixed;
-use crate::geom::{Point, Rect, Vector, VectorExt, WorldUnit};
+use crate::geom::{Point, Rect, Vector, VectorExt, WorldUnit, vec2};
 
 /// Allowed rounding error when comparing whether two shapes are overlapping.
 /// If they overlap by only this amount, they'll be considered touching.
@@ -90,12 +92,98 @@ function Shape:normals()
 end
 */
 
+#[inline]
+fn axial_projections(a: &Polygon, b: &Polygon) -> ArrayVec<[(Vector, Fixed, Vector); 4]> {
+    let mut projections = ArrayVec::new();
+
+    if a.has_horizontal_normal || b.has_horizontal_normal {
+        let (min1, max1) = (a.bbox.min_x(), a.bbox.max_x());
+        let (min2, max2) = (b.bbox.min_x(), b.bbox.max_x());
+        let dist;
+        let sep;
+        let mut fullaxis = vec2(1, 0);
+        if min1 < min2 {
+            // 1 appears first, so take the distance from 1 to 2
+            // Ignore extremely tiny overlaps, which are likely precision errors
+            dist = fudge_to_zero(min2 - max1);
+            sep = Vector::new(min2 - max1, 0.into());
+        }
+        else {
+            // Other way around
+            dist = fudge_to_zero(min1 - max2);
+            // Note that sep is always the vector from us to them
+            sep = Vector::new(max2 - min1, 0.into());
+            // Likewise, flip the axis so it points towards them
+            fullaxis = -fullaxis;
+        }
+
+        projections.push((fullaxis, dist, sep));
+    
+    }
+
+    if a.has_vertical_normal || b.has_vertical_normal {
+        let (min1, max1) = (a.bbox.min_y(), a.bbox.max_y());
+        let (min2, max2) = (b.bbox.min_y(), b.bbox.max_y());
+        let dist;
+        let sep;
+        let mut fullaxis = vec2(0, 1);
+        if min1 < min2 {
+            // 1 appears first, so take the distance from 1 to 2
+            // Ignore extremely tiny overlaps, which are likely precision errors
+            dist = fudge_to_zero(min2 - max1);
+            sep = Vector::new(0.into(), min2 - max1);
+        }
+        else {
+            // Other way around
+            dist = fudge_to_zero(min1 - max2);
+            // Note that sep is always the vector from us to them
+            sep = Vector::new(0.into(), max2 - min1);
+            // Likewise, flip the axis so it points towards them
+            fullaxis = -fullaxis;
+        }
+
+        projections.push((fullaxis, dist, sep));
+    }
+
+    for &(mut fullaxis) in a.other_normals.iter().chain(b.other_normals.iter()) {
+        if fullaxis == Vector::zero() {
+            continue;
+        }
+
+        let (min1, max1, minpt1, maxpt1) = a.project_onto_axis(fullaxis);
+        let (min2, max2, minpt2, maxpt2) = b.project_onto_axis(fullaxis);
+        let dist;
+        let sep;
+        if min1 < min2 {
+            // 1 appears first, so take the distance from 1 to 2
+            // Ignore extremely tiny overlaps, which are likely precision errors
+            dist = fudge_to_zero(min2 - max1);
+            sep = minpt2 - maxpt1;
+        }
+        else {
+            // Other way around
+            dist = fudge_to_zero(min1 - max2);
+            // Note that sep is always the vector from us to them
+            sep = maxpt2 - minpt1;
+            // Likewise, flip the axis so it points towards them
+            fullaxis = -fullaxis;
+        }
+    }
+
+    return projections;
+}
+
 // TODO gotta merge all these
 
 /// An arbitrary (CONVEX) polygon
 pub struct Polygon {
+    // TODO i would love to not need points for an AABB, but i don't pass these around by value so
+    // maybe it doesn't matter
     points: [Point; 4],
     bbox: Rect,
+    has_vertical_normal: bool,
+    has_horizontal_normal: bool,
+    other_normals: ArrayVec<[Vector; 2]>,
 }
 
 
@@ -263,15 +351,64 @@ pub struct Collision {
     pub left_normal_dot: Fixed,
     pub right_normal_dot: Fixed,
 }
+impl Collision {
+    pub fn new() -> Collision {
+        Collision{
+            movement: Vector::zero(),
+            amount: 0.into(),
+            touchdist: 0.into(),
+            touchtype: Contact::Overlap,
+            _slide: false,
+            left_normal: None,
+            right_normal: None,
+            left_normal_dot: Fixed::min_value(),
+            right_normal_dot: Fixed::min_value(),
+        }
+    }
+}
 
 impl Polygon {
     pub fn new(points: [Point; 4]) -> Polygon {
-        // TODO generate_normals?  whoof
         let bbox = Rect::from_points(&points);
+        let mut has_horizontal_normal = false;
+        let mut has_vertical_normal = false;
+        let mut other_normals = ArrayVec::new();
+        for &(i, j) in &[(0, 1), (1, 2), (2, 3), (3, 0)] {
+            let edge = points[j] - points[i];
+            if edge.x == 0 {
+                has_horizontal_normal = true;
+            }
+            else if edge.y == 0 {
+                has_vertical_normal = true;
+            }
+            else {
+                other_normals.push(edge.perpendicular());
+            }
+        }
         Polygon{
             points,
             bbox,
+            has_horizontal_normal,
+            has_vertical_normal,
+            other_normals,
         }
+    }
+
+    pub fn from_rect(rect: Rect) -> Polygon {
+        Polygon{
+            points: [rect.origin, rect.top_right(), rect.bottom_right(), rect.bottom_left()],
+            bbox: rect,
+            has_horizontal_normal: true,
+            has_vertical_normal: true,
+            other_normals: ArrayVec::new(),
+        }
+    }
+
+    pub fn move_by(&mut self, d: Vector) {
+        for point in self.points.iter_mut() {
+            *point += d;
+        }
+        self.bbox.origin += d;
     }
 
     /// Extend a bbox along a movement vector (to enclose all space it might cross
@@ -328,6 +465,8 @@ impl Polygon {
     /// colliding, or would exactly slide against each other.
     // FIXME couldn't there be a much simpler version of this for two AABBs?
     pub fn slide_towards(&self, other: &Polygon, movement: Vector) -> Option<Collision> {
+        use crate::debug::StopwatchGuard;
+        //let _sw = StopwatchGuard::with_message("slide_towards");
         // We cannot possibly collide if the bboxes don't overlap
         let our_bbox = self.extended_bbox(movement);
         if ! our_bbox.intersects(&other.bbox) {
@@ -356,20 +495,6 @@ impl Polygon {
         // FIXME is the move normal actually necessary, or was it just covering up
         // my bad math before?
         let movenormal = movement.perpendicular();
-        /*
-        local movenormal = movement:perpendicular()
-        movenormal._is_move_normal = true
-        local axes = {}
-        if movenormal ~= Vector.zero then
-            axes[movenormal] = movenormal:normalized()
-        end
-        for norm, norm1 in pairs(self:normals()) do
-            axes[norm] = norm1
-        end
-        for norm, norm1 in pairs(other:normals()) do
-            axes[norm] = norm1
-        end
-        */
 
         let mut left_max_dot = Fixed::min_value();
         let mut left_norm = None;
@@ -380,46 +505,15 @@ impl Polygon {
         let mut maxamt = Fixed::min_value();
         let mut maxnumer = 1.into();
         let mut maxdenom = 1.into();
-        // XXX this is a weird default
+        // The semantics of the SAT are that the shapes overlap unless at least one axis
+        // shows they don't, hence the default of Overlap here
         let mut touchtype = Contact::Overlap;
         let mut slide_axis = None;
-        // FIXME i can ditch the normalized axes entirely; just need to make sure
-        // no callers are relying on getting them in normals
-// XXX what does this loop header actually look like?
-        for &(mut fullaxis) in &[
-            (self.points[1] - self.points[0]).perpendicular(),
-            (self.points[2] - self.points[1]).perpendicular(),
-            (self.points[3] - self.points[2]).perpendicular(),
-            (self.points[0] - self.points[3]).perpendicular(),
-            (other.points[1] - other.points[0]).perpendicular(),
-            (other.points[2] - other.points[1]).perpendicular(),
-            (other.points[3] - other.points[2]).perpendicular(),
-            (other.points[0] - other.points[3]).perpendicular(),
-        ] {
-            if fullaxis == Vector::zero() {
-                continue;
-            }
-
-            let (min1, max1, minpt1, maxpt1) = self.project_onto_axis(fullaxis);
-            let (min2, max2, minpt2, maxpt2) = other.project_onto_axis(fullaxis);
-            let mut axis = fullaxis.normalize();
-            let dist;
-            let sep;
-            if min1 < min2 {
-                // 1 appears first, so take the distance from 1 to 2
-                // Ignore extremely tiny overlaps, which are likely precision errors
-                dist = fudge_to_zero(min2 - max1);
-                sep = minpt2 - maxpt1;
-            }
-            else {
-                // Other way around
-                dist = fudge_to_zero(min1 - max2);
-                // Note that sep is always the vector from us to them
-                sep = maxpt2 - minpt1;
-                // Likewise, flip the axis so it points towards them
-                axis = -axis;
-                fullaxis = -fullaxis;
-            }
+        // FIXME make this an optimization for boxes only -- or maybe even write a separate
+        // implementation for boxes
+        // FIXME figure out if i actually need the movement as an axis
+        for (mut fullaxis, dist, sep) in axial_projections(self, other) {
+            let axis = fullaxis.normalize();
 
             // Negative distance means the shapes overlap from this perspective, which is
             // inconclusive
@@ -463,6 +557,11 @@ impl Polygon {
             // perpendicular to the axis forever without hitting anything.
             let numer = sep.dot(fullaxis);
             let amount = fudge_to_zero(numer / dot);
+            /* TODO right?
+            if amount > PRECISION + Fixed::promote(1) {
+                return None;
+            }
+            */
 
             // TODO i think i could avoid this entirely by using a cross
             // product instead?
@@ -485,19 +584,23 @@ impl Polygon {
                 continue;
             }
 
-            // XXX continue if this is a move normal
-            // Now all that's left to do is merge the collision normal with what we've got so
+            // XXX used to continue if this is a move normal
+            // Now all that's left to do is merge the collision normal
             // far
 
             // FIXME these are no longer de-duplicated, hmm
-            let normal = -fullaxis;
+            let mut normal = -fullaxis;
             // XXX normals normals[normal] = -axis;
 
-            let ourdot = -(movement.dot(axis));
-            // Skip normals that face away from us
-            // XXX is this right, we could skip two iterations if we flipped it
+            let mut ourdot = -(movement.dot(axis));
+            // Flip normals that face away from us
+            // TODO justification is that i only use two axes for box/box collisions, and if i
+            // want to handle normals facing away, i should really be doing it earlier in this
+            // loop -- though i'm not sure how this would work for a line collider?
             if ourdot > 0 {
-                continue;
+                //continue;
+                ourdot = -ourdot;
+                normal = -normal;
             }
 
             // Determine if this normal is on our left or right
