@@ -7,6 +7,7 @@ extern crate gba;
 extern crate num_traits;
 
 mod data;
+mod debug;
 mod fixed;
 mod geom;
 mod whammo;
@@ -24,17 +25,6 @@ fn panic(panic_info: &core::panic::PanicInfo) -> ! {
     loop {}
 }
 
-macro_rules! spew (
-    () => {};
-    ($($arg:tt)*) => ({
-        use gba::mgba::{MGBADebug, MGBADebugLevel};
-        use core::fmt::Write;
-        if let Some(mut debug) = MGBADebug::new() {
-            write!(debug, $($arg)*);
-            debug.send(MGBADebugLevel::Debug);
-        }
-    });
-);
 
 
 use arrayvec::ArrayVec;
@@ -44,6 +34,7 @@ use gba::{
         background::{BackgroundControlSetting, BG0CNT, BG1CNT, BG0HOFS, BG0VOFS},
         display::{DISPCNT, DisplayControlSetting, DisplayMode, spin_until_vblank, spin_until_vdraw},
         keypad::{read_key_input},
+        timers::{TimerControlSetting, TimerTickRate, TM0CNT_L, TM0CNT_H},
     },
     oam::{write_obj_attributes},
     palram::{index_palram_bg_8bpp, index_palram_obj_8bpp},
@@ -134,11 +125,18 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
         sprite_index: 0,
         sprite_timer: 0,
     };
-    use crate::fixed::Fixed;
-    spew!("7 / 3 = {:?}", Fixed::promote(7) / Fixed::promote(3));
+
+    let timer_disabled = TimerControlSetting::new().with_tick_rate(TimerTickRate::CPU64);
+    let timer_enabled = timer_disabled.with_enabled(true);
+
     loop {
         spin_until_vdraw();
         spin_until_vblank();
+
+        // Reset the timer by disabling and enabling it
+        TM0CNT_H.write(timer_disabled);
+        TM0CNT_H.write(timer_enabled);
+
         step(&mut game, &mut lexy);
         lexy.update(&game);
 
