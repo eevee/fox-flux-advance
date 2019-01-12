@@ -79,7 +79,23 @@ impl Fixed {
 
 impl fmt::Debug for Fixed {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{:?}:{:?}", self.to_int_floor(), self.0 as FixedFraction & Fixed::MAX_FRACTION)
+        write!(f, "{}", self.to_int_floor())?;
+        // TODO does this work correctly with negatives?  for that matter, does int_floor?  don't i
+        // want to round towards zero?
+        let mut frac = self.0 as FixedFraction & Fixed::MAX_FRACTION;
+        if frac > 0 {
+            write!(f, ".")?;
+            for place in 0..3 {
+                frac *= 10;
+                let digit = (frac & !Fixed::MAX_FRACTION) >> Fixed::FRACTIONAL_BITS;
+                write!(f, "{}", digit)?;
+                frac &= Fixed::MAX_FRACTION;
+                if frac == 0 {
+                    break;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
