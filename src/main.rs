@@ -27,7 +27,6 @@ fn panic(panic_info: &core::panic::PanicInfo) -> ! {
 
 
 
-use arrayvec::ArrayVec;
 use gba::{
     base::volatile::VolAddress,
     io::{
@@ -41,7 +40,6 @@ use gba::{
     vram::{text::TextScreenblockEntry, Tile4bpp, CHAR_BASE_BLOCKS, SCREEN_BASE_BLOCKS},
     Color,
 };
-use core::fmt::Write;
 
 
 // NOTE: these are also defined in gba.rs, but the addresses are wrong in 0.3.0
@@ -53,8 +51,10 @@ pub const BG1VOFS: VolAddress<u16> = unsafe { VolAddress::new_unchecked(0x400_00
 
 use crate::data::PALETTE;
 use crate::data::places::TEST_PLACE;
-use crate::geom::{Camera, Point, Rect, Size, Vector, VectorExt, point2, rect, size2, vec2};
-use crate::whammo::shapes::{Collision, Contact, Polygon};
+use crate::fixed::Fixed;
+use crate::geom::{Camera, Point, Rect, Vector, VectorExt, point2, rect, size2, vec2};
+use crate::whammo::shapes::{Contact, Polygon};
+use crate::whammo::CollisionVec;
 
 #[start]
 fn main(_argc: isize, _argv: *const *const u8) -> isize {
@@ -180,7 +180,7 @@ struct Game {
 trait Entity {
     fn update(&mut self, game: &Game);
     fn nudge(&mut self, displacement: Vector) -> Vector;
-    fn collider_sweep(&self, shape: &Polygon, attempted: Vector /*, pass_callback */) -> (Vector, ArrayVec<[Collision; 16]>);
+    fn collider_sweep(&self, shape: &Polygon, attempted: Vector /*, pass_callback */) -> (Vector, CollisionVec);
 }
 
 struct Lexy {
@@ -199,12 +199,11 @@ fn _is_vector_almost_zero(vec: Vector) -> bool {
 }
 
 
-
 enum SlideResult {
     Stuck,
     Slid(Vector),
 }
-fn slide_along_normals(hits: &ArrayVec<[Collision; 16]>, direction: Vector) -> SlideResult {
+fn slide_along_normals(hits: &CollisionVec, direction: Vector) -> SlideResult {
     let perp = direction.perpendicular();
     let mut minleftdot;
     let mut minleftnorm;
@@ -323,7 +322,6 @@ fn slide_along_normals(hits: &ArrayVec<[Collision; 16]>, direction: Vector) -> S
 impl Entity for Lexy {
     fn update(&mut self, game: &Game) {
         // gravity or whatever
-        use crate::fixed::Fixed;
         self.velocity.y += Fixed::promote(16) / 75;
 
         let old_sprite_index = self.sprite_index;
@@ -364,9 +362,9 @@ impl Entity for Lexy {
         }
     }
 
-    fn collider_sweep(&self, shape: &Polygon, attempted: Vector /*, pass_callback */) -> (Vector, ArrayVec<[Collision; 16]>) {
+    fn collider_sweep(&self, shape: &Polygon, attempted: Vector /*, pass_callback */) -> (Vector, CollisionVec) {
         let xbbox = shape.extended_bbox(attempted);
-        let mut collisions = ArrayVec::<[_; 16]>::new();
+        let mut collisions = CollisionVec::new();
         // Check out the tilemap
         for ty in xbbox.min_y().to_tile_coord() .. (xbbox.max_y().to_tile_coord() + 1) {
             for tx in xbbox.min_x().to_tile_coord() .. (xbbox.max_x().to_tile_coord() + 1) {

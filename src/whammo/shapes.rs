@@ -252,7 +252,6 @@ pub enum CollisionNormal {
 }
 #[derive(Debug)]
 pub struct Collision {
-    pub _bbox: Rect,
     pub movement: Vector,
     pub amount: WorldUnit,
     pub touchdist: WorldUnit,
@@ -397,6 +396,10 @@ impl Polygon {
             (other.points[3] - other.points[2]).perpendicular(),
             (other.points[0] - other.points[3]).perpendicular(),
         ] {
+            if fullaxis == Vector::zero() {
+                continue;
+            }
+
             let (min1, max1, minpt1, maxpt1) = self.project_onto_axis(fullaxis);
             let (min2, max2, minpt2, maxpt2) = other.project_onto_axis(fullaxis);
             let mut axis = fullaxis.normalize();
@@ -513,7 +516,6 @@ impl Polygon {
             // easier now that i have touchdist
             //error("seem to be inside something!!  stopping so you can debug buddy  <3")
             return Some(Collision{
-                _bbox: other.bbox,
                 movement: Vector::zero(),
                 amount: 0.into(),
                 touchdist: 0.into(),
@@ -561,7 +563,6 @@ impl Polygon {
             }
 
             return Some(Collision{
-                _bbox: other.bbox,
                 movement: movement,
                 amount: 1.into(),
                 touchdist: touchdist,
@@ -581,7 +582,6 @@ impl Polygon {
         }
 
         return Some(Collision{
-                _bbox: other.bbox,
             // Minimize rounding error by repeating the same division we used to
             // get amount, but multiplying first
             movement: movement * maxnumer / maxdenom,
