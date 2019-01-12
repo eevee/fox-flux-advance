@@ -355,118 +355,8 @@ impl Entity for Lexy {
         let movement = self.velocity.clone();
         self.nudge(movement);
 
-        /*
-        let hitbox = self.bbox.translate(&self.position.to_vector());
-        let lexy_polygon = Polygon::new([
-            hitbox.origin,
-            hitbox.top_right(),
-            hitbox.bottom_right(),
-            hitbox.bottom_left(),
-        ]);
-        let xbbox = lexy_polygon.extended_bbox(self.velocity);
-
-        let mut hits = ArrayVec::<[_; 16]>::new();
-        for ty in xbbox.min_y().to_tile_coord() .. (xbbox.max_y().to_tile_coord() + 1) {
-            for tx in xbbox.min_x().to_tile_coord() .. (xbbox.max_x().to_tile_coord() + 1) {
-                let tid = TEST_PLACE.tiles[ty][tx];
-                if ! TEST_PLACE.tileset.tiles[tid as usize].solid {
-                    continue;
-                }
-
-                let tile_polygon = Polygon::new([
-                    point2(tx as i16 * 8, ty as i16 * 8),
-                    point2(tx as i16 * 8 + 8, ty as i16 * 8),
-                    point2(tx as i16 * 8 + 8, ty as i16 * 8 + 8),
-                    point2(tx as i16 * 8, ty as i16 * 8 + 8),
-                ]);
-                let maybe_hit = lexy_polygon.slide_towards(&tile_polygon, self.velocity);
-                if let Some(hit) = maybe_hit {
-                    hits.push(hit);
-                }
-            }
-        }
-
-        hits.as_mut_slice().sort_unstable_by_key(|collision| collision.amount);
-
-        if hits.len() > 0 {
-            self.position += self.velocity * hits[0].amount;
-            if hits[0].amount < 1 {
-                self.velocity = Vector::zero();
-            }
-        }
-        else {
-            self.position += self.velocity;
-        }
-        */
-
-        /*
-        // poor man's collision detection
-        const TILE_SIZE: i16 = 8;
-        // x
-        self.position.x += dx;
-        // y
-        if dy > 0 {
-            let mut edge = self.position.y + self.bbox.max_y();
-            let mut to_next_tile = TILE_SIZE - edge % TILE_SIZE;
-            if to_next_tile == TILE_SIZE {
-                to_next_tile = 0.into();
-            }
-            
-            if dy < to_next_tile {
-                self.position.y += dy;
-            }
-            else if dy >= to_next_tile {
-                self.position.y += to_next_tile;
-                edge += to_next_tile;
-                dy -= to_next_tile;
-                while dy > 0 {
-                    let tid = TEST_PLACE.tiles[edge.to_tile_coord()][self.position.x.to_tile_coord()];
-                    if TEST_PLACE.tileset.tiles[tid as usize].solid {
-                        self.velocity.y = 0.into();
-                        break;
-                    }
-                    if dy >= TILE_SIZE {
-                        dy -= TILE_SIZE;
-                        self.position.y += TILE_SIZE;
-                        edge += TILE_SIZE;
-                    }
-                    else {
-                        self.position.y += dy;
-                        break;
-                    }
-                }
-            }
-        }
-        else if dy < 0 {
-            let mut edge = self.position.y + self.bbox.min_y();
-            let to_next_tile = edge % TILE_SIZE;
-            dy = -dy;
-            if dy < to_next_tile {
-                self.position.y -= dy;
-            }
-            else if dy >= to_next_tile {
-                self.position.y -= to_next_tile;
-                edge -= to_next_tile;
-                dy -= to_next_tile;
-                while dy > 0 {
-                    let tid = TEST_PLACE.tiles[edge.to_tile_coord()][self.position.x.to_tile_coord()];
-                    if TEST_PLACE.tileset.tiles[tid as usize].solid {
-                        break;
-                    }
-                    if dy >= TILE_SIZE {
-                        dy -= TILE_SIZE;
-                        self.position.y -= TILE_SIZE;
-                    }
-                    else {
-                        self.position.y -= dy;
-                        break;
-                    }
-                }
-            }
-        }
-        */
-
         // update position i guess?  assumes slot 0!
+        // FIXME this should very much be done in shadow oam and copied at next vblank
         let sx = self.position.x - (if self.facing_left { 32 - self.anchor.x } else { self.anchor.x }) - game.camera.position.x;
         let sy = self.position.y - self.anchor.y - game.camera.position.y;
         unsafe {
@@ -477,18 +367,6 @@ impl Entity for Lexy {
     }
 
     fn collider_sweep(&self, shape: &Polygon, attempted: Vector /*, pass_callback */) -> (Vector, ArrayVec<[Collision; 16]>) {
-        /*
-        local hits = {}
-        local collisions = {}
-        local neighbors = self.blockmap:neighbors(shape, attempted:unpack())
-        for neighbor in pairs(neighbors) do
-            local collision = shape:slide_towards(neighbor, attempted)
-            if collision then
-                collision.shape = neighbor
-                table.insert(collisions, collision)
-            end
-        end
-        */
         let xbbox = shape.extended_bbox(attempted);
         let mut collisions = ArrayVec::<[_; 16]>::new();
         // Check out the tilemap
