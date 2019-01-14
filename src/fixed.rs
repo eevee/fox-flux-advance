@@ -16,7 +16,8 @@ type FixedStore = i32;
 type FixedWhole = i16;
 type FixedFraction = u16;
 
-const TILE_SIZE_BITS: usize = 3;
+// XXX this is actually a 16x16 tile, which is a bit misleading
+const TILE_SIZE_BITS: usize = 4;
 
 impl Fixed {
     pub const FRACTIONAL_BITS: usize = 8;
@@ -61,6 +62,7 @@ impl Fixed {
     }
 
     // TODO maybe this is more appropriate on a typed Length
+    // XXX this is actually a 16x16 tile, which is a bit misleading
     pub fn to_tile_coord(self) -> usize {
         // TODO what if i'm negative
         (self.0 >> (Self::FRACTIONAL_BITS + TILE_SIZE_BITS)) as usize

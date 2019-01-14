@@ -54,7 +54,7 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
     let disp = DisplayControlSetting::new().with_mode(DisplayMode::Mode2).with_oam_memory_1d(true).with_obj(true);
     DISPCNT.write(disp);
 
-    let tiledata = include_bytes!("../target/assets/terrain.bin");
+    let place = &TEST_PLACE;
 
     // TODO oam_init, blanks out OAM
 
@@ -83,15 +83,39 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
         (0x0700_000c as *mut u16).write_volatile(4u16);
         */
 
-        for p in 0..(3 * 16 * 8 * 8 / 2) {
-            ((0x0600_0100 + p * 2) as *mut u16).write_volatile(tiledata[p * 2] as u16 | (tiledata[p * 2 + 1] as u16) << 8);
-        }
+        dma::DMA3::set_source((place.tileset.chardata as *const u8) as *const u32);
+        dma::DMA3::set_dest(0x0600_0000 as *mut u32);
+        dma::DMA3::set_count(2560 / 4);
+        dma::DMA3::set_control(
+            dma::DMAControlSetting::new()
+            .with_use_32bit(true)
+            .with_enabled(true)
+        );
     }
 
     let mut p = unsafe { SCREEN_BASE_BLOCKS.index(8).cast::<TextScreenblockEntry>() };
-    for row in &TEST_PLACE.tiles {
-        for &tid in row {
-            let tse = TextScreenblockEntry::from_tile_id(tid as u16);
+    for row in &place.tiles[..16] {
+        for &tid in &row[..16] {
+            let tile = &place.tileset.tiles[tid as usize];
+            let tse = TextScreenblockEntry::from_tile_id(tile.chars[0] as u16);
+            unsafe {
+                p.write(tse);
+                p = p.offset(1);
+            }
+            let tse = TextScreenblockEntry::from_tile_id(tile.chars[1] as u16);
+            unsafe {
+                p.write(tse);
+                p = p.offset(1);
+            }
+        }
+        for &tid in &row[..16] {
+            let tile = &place.tileset.tiles[tid as usize];
+            let tse = TextScreenblockEntry::from_tile_id(tile.chars[2] as u16);
+            unsafe {
+                p.write(tse);
+                p = p.offset(1);
+            }
+            let tse = TextScreenblockEntry::from_tile_id(tile.chars[3] as u16);
             unsafe {
                 p.write(tse);
                 p = p.offset(1);
@@ -376,12 +400,7 @@ impl Entity for Lexy {
                 }
 
                 // FIXME merely constructing one of these takes 0.4%, this is silly
-                let tile_polygon = Polygon::new([
-                    point2(tx as i16 * 8, ty as i16 * 8),
-                    point2(tx as i16 * 8 + 8, ty as i16 * 8),
-                    point2(tx as i16 * 8 + 8, ty as i16 * 8 + 8),
-                    point2(tx as i16 * 8, ty as i16 * 8 + 8),
-                ]);
+                let tile_polygon = Polygon::from_rect(rect(tx as i16 * 16, ty as i16 * 16, 16, 16));
                 let maybe_hit = shape.slide_towards(&tile_polygon, attempted);
                 if let Some(hit) = maybe_hit {
                     collisions.push(hit);

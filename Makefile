@@ -10,7 +10,7 @@ target:
 .PHONY: debug
 debug: target/$(ARCH)/debug/$(NAME).gba
 
-target/$(ARCH)/debug/$(NAME).gba: target target/crt0.o target/assets/lexy.bin target/assets/terrain.bin
+target/$(ARCH)/debug/$(NAME).gba: target target/crt0.o target/assets/lexy.bin target/assets/tiles.bin
 	cargo xbuild --target build-stuff/gba/$(ARCH).json
 	arm-none-eabi-objcopy -O binary target/$(ARCH)/debug/$(NAME) target/$(ARCH)/debug/$(NAME).gba
 	gbafix target/$(ARCH)/debug/$(NAME).gba
@@ -18,7 +18,7 @@ target/$(ARCH)/debug/$(NAME).gba: target target/crt0.o target/assets/lexy.bin ta
 .PHONY: release
 release: target/$(ARCH)/release/$(NAME).gba
 	
-target/$(ARCH)/release/$(NAME).gba: target target/crt0.o target/assets/lexy.bin target/assets/terrain.bin
+target/$(ARCH)/release/$(NAME).gba: target target/crt0.o target/assets/lexy.bin target/assets/tiles.bin
 	cargo xbuild --release --target build-stuff/gba/$(ARCH).json
 	arm-none-eabi-objcopy -O binary target/$(ARCH)/release/$(NAME) target/$(ARCH)/release/$(NAME).gba
 	gbafix target/$(ARCH)/release/$(NAME).gba
@@ -30,5 +30,5 @@ target/crt0.o:
 target/assets/lexy.bin: build-stuff/png-to-tiles.py assets/lexy.png
 	python build-stuff/png-to-tiles.py assets/lexy.png 32 64 -o target/assets/lexy.bin
 
-target/assets/terrain.bin: build-stuff/png-to-tiles.py assets/terrain.png
-	python build-stuff/png-to-tiles.py assets/terrain.png 32 32 -o target/assets/terrain.bin
+target/assets/tiles.bin: build-stuff/png-to-tiles.py assets/tiles.png
+	python build-stuff/png-to-tiles.py assets/tiles.png 8 8 -o target/assets/tiles.bin
