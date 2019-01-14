@@ -30,7 +30,7 @@ fn panic(panic_info: &core::panic::PanicInfo) -> ! {
 use gba::{
     base::volatile::VolAddress,
     io::{
-        background::{BackgroundControlSetting, BG0CNT, BG1CNT, BG0HOFS, BG0VOFS},
+        background::{BackgroundControlSetting, BG0CNT, BG1CNT, BG0HOFS, BG0VOFS, BG1HOFS, BG1VOFS},
         display::{DISPCNT, DisplayControlSetting, DisplayMode, spin_until_vblank, spin_until_vdraw},
         keypad::{read_key_input},
         timers::{TimerControlSetting, TimerTickRate, TM0CNT_L, TM0CNT_H},
@@ -40,13 +40,6 @@ use gba::{
     vram::{text::TextScreenblockEntry, Tile4bpp, CHAR_BASE_BLOCKS, SCREEN_BASE_BLOCKS},
     Color,
 };
-
-
-// NOTE: these are also defined in gba.rs, but the addresses are wrong in 0.3.0
-/// BG1 X-Offset. Write only. Text mode only. 9 bits.
-pub const BG1HOFS: VolAddress<u16> = unsafe { VolAddress::new_unchecked(0x400_0014) };
-/// BG1 Y-Offset. Write only. Text mode only. 9 bits.
-pub const BG1VOFS: VolAddress<u16> = unsafe { VolAddress::new_unchecked(0x400_0016) };
 
 
 use crate::data::PALETTE;

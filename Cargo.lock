@@ -20,13 +20,13 @@ version = "0.1.0"
 dependencies = [
  "arrayvec 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "euclid 0.19.5 (git+https://github.com/servo/euclid?branch=no-std)",
- "gba 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "gba 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-traits 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "gba"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "gba-proc-macro 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -92,7 +92,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [metadata]
 "checksum arrayvec 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)" = "92c7fb76bc8826a8b33b4ee5bb07a247a81e76764ab4d55e8f73e3a4d8808c71"
 "checksum euclid 0.19.5 (git+https://github.com/servo/euclid?branch=no-std)" = "<none>"
-"checksum gba 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "39ad8663f064b0edc890979af052d8f990c97a5320f59d8b770fd625669038f6"
+"checksum gba 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "f71dc0cbb8d9eaa5941ff676d96d10f835010b89c282ab2ad1ffc742cc637f83"
 "checksum gba-proc-macro 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2cf87285990ee5c1165d24cc92d0cb5b4706c9e835e645850ef88acb811d25ac"
 "checksum nodrop 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)" = "2f9667ddcc6cc8a43afc9b7917599d7216aa09c463919ea32c59ed6cac8bc945"
 "checksum num-traits 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "0b3a5d7cc97d6d30d8b9bc8fa19bf45349ffe46241e8816f50f62f6d6aaabee1"
