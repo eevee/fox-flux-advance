@@ -23,12 +23,13 @@ target/$(ARCH)/release/$(NAME).gba: target target/crt0.o target/assets/lexy.bin 
 	arm-none-eabi-objcopy -O binary target/$(ARCH)/release/$(NAME) target/$(ARCH)/release/$(NAME).gba
 	gbafix target/$(ARCH)/release/$(NAME).gba
 
-# FIXME all of these need the target dir to exist, but i don't want to depend on it because it's phony so these will always run, but i rely on that above to force cargo to always run...
-target/crt0.o:
+# Use order only dependancies to force the target folder to exist without rebuilding them all the time
+# http://www.gnu.org/software/make/manual/make.html#Prerequisite-Types
+target/crt0.o: | target
 	arm-none-eabi-as build-stuff/gba/crt0.s -o target/crt0.o
 
-target/assets/lexy.bin: build-stuff/png-to-tiles.py assets/lexy.png
+target/assets/lexy.bin: build-stuff/png-to-tiles.py assets/lexy.png | target
 	python build-stuff/png-to-tiles.py assets/lexy.png 32 64 -o target/assets/lexy.bin
 
-target/assets/tiles.bin: build-stuff/png-to-tiles.py assets/tiles.png
+target/assets/tiles.bin: build-stuff/png-to-tiles.py assets/tiles.png | target
 	python build-stuff/png-to-tiles.py assets/tiles.png 8 8 -o target/assets/tiles.bin
